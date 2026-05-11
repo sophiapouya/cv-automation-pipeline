@@ -86,7 +86,8 @@ def make_id(title: str) -> str:
 
 def clean(text: str) -> str:
     text = text.replace("\xa0", " ").replace("\u2028", " ").replace("\u2029", " ")
-    text = text.replace("", " ").replace("–", "-").replace("—", "-")
+    text = text.replace("​", "").replace("‌", "").replace("‍", "").replace("⁠", "").replace("­", "")
+    text = text.replace("–", "-").replace("—", "-")
     text = re.sub(r"\*{1,3}([^*]+)\*{1,3}", r"\1", text)
     return WS_RE.sub(" ", text).strip(" \t.;")
 
@@ -116,29 +117,29 @@ def get_text(cv_path: Path) -> str:
         except Exception as exc:
             sys.exit(f"[ERROR] PDF read failed: {exc}")
 
-    if suffix in {".doc", ".docx"}:
+    if suffix == ".docx":
         try:
-            return read_with_textutil(cv_path)
-        except Exception:
-            pass
+            from docx import Document
 
-        work_path = cv_path
-        tmpdir = None
-        if suffix == ".doc":
-            tmpdir = tempfile.mkdtemp()
-            # LibreOffice executable name differs by OS
-            lo_cmd = "soffice" if sys.platform == "win32" else "libreoffice"
-            result = subprocess.run(
-                [lo_cmd, "--headless", "--convert-to", "docx", "--outdir", tmpdir, str(cv_path)],
-                capture_output=True,
-                text=True,
-                timeout=120,
-                check=False,
-            )
-            if result.returncode != 0:
-                sys.exit(f"[ERROR] LibreOffice conversion failed:\n{result.stderr}")
-            work_path = Path(tmpdir) / f"{cv_path.stem}.docx"
+            doc = Document(str(cv_path))
+            paragraphs = [clean(p.text) for p in doc.paragraphs if clean(p.text)]
+            return "\n".join(paragraphs)
+        except Exception as exc:
+            sys.exit(f"[ERROR] DOCX read failed: {exc}")
 
+    if suffix == ".doc":
+        tmpdir = tempfile.mkdtemp()
+        lo_cmd = "soffice" if sys.platform == "win32" else "libreoffice"
+        result = subprocess.run(
+            [lo_cmd, "--headless", "--convert-to", "docx", "--outdir", tmpdir, str(cv_path)],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=False,
+        )
+        if result.returncode != 0:
+            sys.exit(f"[ERROR] LibreOffice conversion failed:\n{result.stderr}")
+        work_path = Path(tmpdir) / f"{cv_path.stem}.docx"
         try:
             from docx import Document
 
